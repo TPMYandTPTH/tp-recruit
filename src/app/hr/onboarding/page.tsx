@@ -11,7 +11,7 @@ import {
   ChevronUp,
   Eye,
   Send,
-  Toggle2,
+  ToggleLeft,
   Calendar,
   Download,
 } from "lucide-react";
@@ -372,7 +372,7 @@ export default function HROnboardingPage() {
                       <p className="text-xs font-semibold text-[#4B4C6A] uppercase">{workflow.day}</p>
                       <p className="text-sm text-[#414141]">{workflow.name}</p>
                     </div>
-                    <Toggle2
+                    <ToggleLeft
                       className={`w-5 h-5 ${
                         workflow.active ? "text-green-600" : "text-[#C2C7CD]"
                       }`}
