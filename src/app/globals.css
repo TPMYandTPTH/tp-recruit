@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* TP Sans — Official Teleperformance typeface */
+@font-face {
+  font-family: 'TP Sans';
+  src: url('/fonts/TPSans-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'TP Sans';
+  src: url('/fonts/TPSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'TP Sans';
+  src: url('/fonts/TPSans-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'TP Sans';
+  src: url('/fonts/TPSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+}
+@font-face {
+  font-family: 'TP Sans';
+  src: url('/fonts/TPSans-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+}
+
+:root {
+  --tp-dark-slate: #4B4C6A;
+  --tp-pink: #FF0082;
+  --tp-slate: #848DAD;
+  --tp-muted-violet: #706398;
+  --tp-dark-sand: #918E81;
+  --tp-sand: #D4D2CA;
+  --tp-pastel-sand: #ECE9E7;
+  --tp-pastel-slate: #C2C7CD;
+  --tp-pastel-violet: #E2DFE8;
+  --tp-dark-gray: #414141;
+  --tp-gray: #676767;
+  --tp-light-gray: #CCCCCC;
+  --tp-pastel-gray: #E6E6E5;
+  --tp-dark-indigo: #3E2666;
+  --foreground: #1a1a2e;
+  --background: #f8f7f5;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: 'TP Sans', Calibri, system-ui, -apple-system, sans-serif;
+}
+
+/* TP gradient for headers */
+.tp-gradient {
+  background: linear-gradient(135deg, #3E2666 0%, #4B4C6A 50%, #706398 100%);
+}
+
+.tp-gradient-pink {
+  background: linear-gradient(135deg, #4B4C6A 0%, #FF0082 100%);
+}
+
+/* Progress tracker - TP themed */
+.progress-step {
+  @apply flex items-center gap-3 py-3 px-4 rounded-lg transition-all duration-200;
+}
+.progress-step.active {
+  @apply border-l-4;
+  border-color: var(--tp-dark-slate);
+  background: #eeedf2;
+}
+.progress-step.completed {
+  @apply bg-green-50 border-l-4 border-green-500;
+}
+.progress-step.pending {
+  @apply border-l-4;
+  background: #f5f4f2;
+  border-color: var(--tp-pastel-slate);
+}
+.progress-step.failed {
+  @apply bg-red-50 border-l-4 border-red-400;
+}
+
+/* Smooth transitions */
+.stage-transition {
+  transition: all 0.3s ease-in-out;
+}

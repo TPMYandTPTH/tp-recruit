@@ -1,0 +1,352 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "windows", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ROLES & SALARY BANDS
+// ============================================================
+
+model Role {
+  id          String   @id @default(cuid())
+  title       String                          // "Customer Service Agent - EN"
+  client      String                          // "Acme Corp"
+  campaign    String?                         // "Holiday Support 2026"
+  department  String   @default("Operations")
+
+  // Salary band (from WFM / Handbook)
+  salaryMin   Float
+  salaryMid   Float
+  salaryMax   Float
+  currency    String   @default("MYR")
+
+  // Market data
+  marketMedian    Float?                      // From annual market survey
+
+  // Role config
+  criticality     String   @default("STANDARD")       // STANDARD, PRIORITY, CRITICAL
+  interviewMode   String   @default("HUMAN_INTERVIEW") // NO_INTERVIEW, AI_INTERVIEW, HUMAN_INTERVIEW
+
+  // Fill rate tracking
+  totalPositions  Int     @default(0)
+  filledPositions Int     @default(0)
+
+  candidates  Candidate[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// CANDIDATES
+// ============================================================
+
+model Candidate {
+  id              String   @id @default(cuid())
+  portalToken     String   @unique               // Unique token for candidate portal URL
+
+  // Personal info
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+
+  // Application info
+  roleId          String
+  role            Role     @relation(fields: [roleId], references: [id])
+  source          String   @default("PORTAL")    // PORTAL, JOB_BOARD, REFERRAL, WALK_IN, SOCIAL_MEDIA
+  icimsCandidateId String?                       // iCIMS reference ID
+
+  // Salary info (captured during screening)
+  expectedSalary  Float?
+
+  // Current stage
+  stage           String   @default("SCREENING") // See CandidateStage values
+  stageUpdatedAt  DateTime @default(now())
+
+  // Screening
+  screeningData       String?                    // JSON string of screening answers
+  screeningPassedAt   DateTime?
+
+  // Assessment
+  assessmentScore     Float?
+  assessmentPassedAt  DateTime?
+  assessmentLink      String?                    // Hallo.ai assessment link
+
+  // Interview
+  interviewScore      Float?
+  interviewNotes      String?
+  interviewPassedAt   DateTime?
+  interviewScheduledAt DateTime?
+
+  // Offer
+  offers          Offer[]
+
+  // Onboarding
+  onboardingStartedAt DateTime?
+  bgvStatus           String?                    // PENDING, IN_PROGRESS, PASSED, FAILED
+  documentsUploaded   Boolean @default(false)
+
+  // Messaging channels (for WhatsApp/LINE notifications)
+  country             String   @default("MY")     // MY | TH
+  whatsappPhone       String?                     // +60... or +66... (normalized)
+  lineUserId          String?                     // LINE userId (Thailand)
+  preferredChannel    String   @default("whatsapp") // whatsapp | line | email
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ============================================================
+// OFFERS
+// ============================================================
+
+model Offer {
+  id              String   @id @default(cuid())
+  candidateId     String
+  candidate       Candidate @relation(fields: [candidateId], references: [id])
+
+  // Offer details
+  round           Int      @default(1)           // 1, 2, or 3
+  offeredSalary   Float
+
+  // Tier classification
+  tier            String                          // GREEN, AMBER, RED
+
+  // How we calculated it
+  baseSalary          Float                      // Before adjustments
+  criticalityAdj      Float @default(0)          // +/- adjustment
+  fillRateAdj         Float @default(0)          // +/- adjustment
+  marketAdj           Float @default(0)          // +/- adjustment
+  calculationNotes    String?                    // AI-generated explanation
+
+  // Approval
+  approvalStatus  String   @default("PENDING")   // PENDING, AUTO_APPROVED, APPROVED, DECLINED
+  approvals       Approval[]
+  aiSummary       String?                        // Claude-generated exec brief
+
+  // Candidate response
+  status          String   @default("DRAFT")     // DRAFT, PENDING_APPROVAL, APPROVED, SENT, ACCEPTED, DECLINED, COUNTERED, EXPIRED, WITHDRAWN
+  respondedAt     DateTime?
+  declineReason   String?                        // From candidate
+  declineCategory String?                        // AI-classified: SALARY, LOCATION, TIMING, OTHER
+  counterAmount   Float?                         // If candidate counters
+
+  // Offer letter
+  offerLetterUrl  String?
+  sentAt          DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ============================================================
+// APPROVALS
+// ============================================================
+
+model Approval {
+  id          String   @id @default(cuid())
+  offerId     String
+  offer       Offer    @relation(fields: [offerId], references: [id])
+
+  approverEmail   String
+  approverName    String
+  approverRole    String                          // TA_LEAD, DIRECTOR, COO
+
+  status      String   @default("PENDING")        // PENDING, APPROVED, DECLINED
+  decidedAt   DateTime?
+  notes       String?
+
+  // SLA tracking
+  sentAt      DateTime @default(now())
+  slaDeadline DateTime                         // Auto-calculated based on tier
+  reminded    Boolean  @default(false)
+  escalated   Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ============================================================
+// SCREENING QUESTIONS (configurable per role)
+// ============================================================
+
+model ScreeningQuestion {
+  id          String   @id @default(cuid())
+
+  // Can be global or role-specific
+  roleId      String?                          // null = applies to all roles
+
+  category    String                            // ELIGIBILITY, SKILLS, SALARY
+  question    String
+  type        String                            // TEXT, NUMBER, MULTIPLE_CHOICE, YES_NO, SALARY_INPUT
+  options     String?                          // JSON array for MULTIPLE_CHOICE
+  isRequired  Boolean  @default(true)
+
+  // Auto-fail config
+  failValue   String?                          // If answer matches this, auto-fail
+
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// AUDIT LOG (track everything)
+// ============================================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+
+  entityType  String                           // "Candidate", "Offer", "Approval"
+  entityId    String
+  action      String                           // "CREATED", "STAGE_CHANGED", "OFFER_SENT", etc.
+  details     String?                          // JSON with details
+
+  performedBy String?                          // User email or "SYSTEM"
+
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// SOURCING CHANNELS
+// ============================================================
+
+model SourcingChannel {
+  id            String   @id @default(cuid())
+
+  name          String                            // "JobStreet Malaysia", "LinkedIn Recruiter", etc.
+  type          String                            // JOB_BOARD, SOCIAL_MEDIA, REFERRAL, CAREER_SITE, WALK_IN, ATS_IMPORT, WEB_SCRAPER, AGENCY, EVENT
+  platform      String?                           // "jobstreet", "linkedin", "indeed", "glassdoor", "facebook", "tiktok", etc.
+
+  // Configuration
+  isActive      Boolean  @default(true)
+  autoImport    Boolean  @default(false)          // Whether to auto-import candidates
+  importUrl     String?                           // API endpoint, scrape URL, or webhook URL
+  apiKey        String?                           // Encrypted API key for the platform
+  config        String?                           // JSON config (scraping rules, filters, etc.)
+
+  // Tracking
+  costPerHire       Float?                        // Average cost per hire from this channel
+  monthlyBudget     Float?                        // Monthly spend cap
+  totalCandidates   Int      @default(0)          // Running total imported
+  totalHired        Int      @default(0)          // Running total hired from this channel
+  lastImportAt      DateTime?                     // When we last pulled candidates
+  lastImportCount   Int      @default(0)          // How many came in last import
+
+  // Notes
+  notes         String?                           // Admin notes about this channel
+  contactPerson String?                           // Agency contact, platform rep, etc.
+  contactEmail  String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================================
+// OTP AUTHENTICATION
+// ============================================================
+
+model OtpCode {
+  id          String   @id @default(cuid())
+  email       String
+  code        String                            // 6-digit OTP
+  expiresAt   DateTime                          // 5 minutes from creation
+  verified    Boolean  @default(false)
+  attempts    Int      @default(0)              // Max 3 attempts
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// STAFF USERS & AUTHENTICATION
+// ============================================================
+
+model StaffUser {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String
+  role        String   // HOD, RECRUITER, SOURCING, MARKETING, HR, OPS, ADMIN
+  department  String   @default("Recruitment")
+  isActive    Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StaffOtp {
+  id          String   @id @default(cuid())
+  email       String
+  code        String
+  expiresAt   DateTime
+  verified    Boolean  @default(false)
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// NOTIFICATIONS (WhatsApp + LINE + Email)
+// ============================================================
+
+model Notification {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+
+  candidateId   String
+  jobId         String?
+
+  // Channel
+  channel       String                           // whatsapp | line | email
+  recipient     String                           // phone number, LINE userId, or email
+
+  // Content
+  template      String                           // template name
+  templateVars  Json     @default("{}")
+  messagePreview String?
+
+  // Delivery status
+  status        String   @default("pending")     // pending → sent → delivered → read → failed
+  statusUpdated DateTime @default(now())
+  externalId    String?                          // WhatsApp message ID or LINE request ID
+  error         String?
+
+  // Metadata
+  triggeredBy   String?                          // auto | manual | cron
+  triggeredFrom String?                          // system | api | dashboard
+
+  @@index([candidateId])
+  @@index([status])
+  @@index([channel])
+  @@index([externalId])
+}
+
+model NotificationTemplate {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+
+  name          String   @unique
+  description   String?
+  category      String                           // assessment | interview | status | onboarding
+
+  // Channel-specific template IDs
+  whatsappTemplateName String?
+  whatsappTemplateLang String   @default("en")
+  lineTemplateType     String?
+  lineTemplateBody     Json?
+  emailSubject         String?
+  emailBodyHtml        String?
+
+  // Template with {{variable}} placeholders
+  messageBody   String
+
+  // Which countries
+  countries     String[] @default(["MY", "TH"])
+
+  active        Boolean  @default(true)
+}
